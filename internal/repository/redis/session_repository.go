@@ -66,6 +66,29 @@ func (r *SessionRepository) Get(sessionID string) (*domain.Session, error) {
 	return &session, nil
 }
 
+func (r *SessionRepository) Refresh(sessionID string, newExpiry time.Duration) (*domain.Session, error) {
+	ctx := context.Background()
+
+	session, err := r.Get(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	session.ExpiresAt = time.Now().Add(newExpiry)
+
+	data, err := json.Marshal(session)
+	if err != nil {
+		return nil, err
+	}
+
+	key := r.sessionKey(sessionID)
+	if err := r.client.Set(ctx, key, data, newExpiry).Err(); err != nil {
+		return nil, err
+	}
+
+	return session, nil
+}
+
 func (r *SessionRepository) Delete(sessionID string) error {
 	ctx := context.Background()
 	key := r.sessionKey(sessionID)

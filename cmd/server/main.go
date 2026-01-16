@@ -18,8 +18,6 @@ import (
 	"github.com/yourusername/authservice/internal/pkg/logger"
 	postgresrepo "github.com/yourusername/authservice/internal/repository/postgres"
 	redisrepo "github.com/yourusername/authservice/internal/repository/redis"
-	authuc "github.com/yourusername/authservice/internal/usecase/auth"
-	useruc "github.com/yourusername/authservice/internal/usecase/user"
 )
 
 func main() {
@@ -67,20 +65,24 @@ func main() {
 	passwordHasher := hasher.NewBcryptHasher(0)
 	jwtManager := jwt.NewManager(cfg.JWT.Secret, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 
-	authUseCase := authuc.NewAuthUseCase(
-		userRepo,
-		tokenRepo,
-		sessionRepo,
-		passwordHasher,
-		jwtManager,
-		cfg.Session.Expiry,
-	)
-	userUseCase := useruc.NewUserUseCase(userRepo, passwordHasher)
-
-	router := httpdelivery.NewRouter(authUseCase, userUseCase, jwtManager)
+	router := httpdelivery.NewRouter(&httpdelivery.RouterParams{
+		UserRepo:    userRepo,
+		TokenRepo:   tokenRepo,
+		SessionRepo: sessionRepo,
+		Hasher:      passwordHasher,
+		JWT:         jwtManager,
+		SessionExp:  cfg.Session.Expiry,
+	})
 	router.Setup()
 
-	grpcServer := grpcdelivery.NewServer(authUseCase, jwtManager)
+	grpcServer := grpcdelivery.NewServer(&grpcdelivery.AuthServiceParams{
+		UserRepo:    userRepo,
+		TokenRepo:   tokenRepo,
+		SessionRepo: sessionRepo,
+		Hasher:      passwordHasher,
+		JWT:         jwtManager,
+		SessionExp:  cfg.Session.Expiry,
+	})
 
 	errChan := make(chan error, 2)
 

@@ -7,8 +7,6 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	pb "github.com/yourusername/authservice/api/proto/auth"
-	"github.com/yourusername/authservice/internal/pkg/jwt"
-	authUC "github.com/yourusername/authservice/internal/usecase/auth"
 )
 
 type Server struct {
@@ -16,10 +14,10 @@ type Server struct {
 	authService *AuthServiceServer
 }
 
-func NewServer(authUseCase authUC.UseCase, jwtManager jwt.Manager) *Server {
+func NewServer(params *AuthServiceParams) *Server {
 	grpcServer := grpc.NewServer()
 
-	authService := NewAuthServiceServer(authUseCase, jwtManager)
+	authService := NewAuthServiceServer(params)
 	pb.RegisterAuthServiceServer(grpcServer, authService)
 
 	reflection.Register(grpcServer)

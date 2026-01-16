@@ -18,6 +18,7 @@ type Session struct {
 type SessionRepository interface {
 	Create(session *Session) error
 	Get(sessionID string) (*Session, error)
+	Refresh(sessionID string, newExpiry time.Duration) (*Session, error)
 	Delete(sessionID string) error
 	DeleteAllUserSessions(userID uuid.UUID) error
 }

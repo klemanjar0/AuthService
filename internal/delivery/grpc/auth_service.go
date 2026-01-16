@@ -2,25 +2,38 @@ package grpc
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/yourusername/authservice/api/proto/auth"
+	"github.com/yourusername/authservice/internal/domain"
+	"github.com/yourusername/authservice/internal/pkg/hasher"
 	"github.com/yourusername/authservice/internal/pkg/jwt"
-	authUC "github.com/yourusername/authservice/internal/usecase/auth"
+	"github.com/yourusername/authservice/internal/usecase/auth/login"
+	"github.com/yourusername/authservice/internal/usecase/auth/logout"
+	"github.com/yourusername/authservice/internal/usecase/auth/refresh"
+	"github.com/yourusername/authservice/internal/usecase/auth/register"
 )
+
+type AuthServiceParams struct {
+	UserRepo    domain.UserRepository
+	TokenRepo   domain.TokenRepository
+	SessionRepo domain.SessionRepository
+	Hasher      hasher.Hasher
+	JWT         jwt.Manager
+	SessionExp  time.Duration
+}
 
 type AuthServiceServer struct {
 	pb.UnimplementedAuthServiceServer
-	authUC     authUC.UseCase
-	jwtManager jwt.Manager
+	*AuthServiceParams
 }
 
-func NewAuthServiceServer(authUseCase authUC.UseCase, jwtManager jwt.Manager) *AuthServiceServer {
+func NewAuthServiceServer(params *AuthServiceParams) *AuthServiceServer {
 	return &AuthServiceServer{
-		authUC:     authUseCase,
-		jwtManager: jwtManager,
+		AuthServiceParams: params,
 	}
 }
 
@@ -29,10 +42,19 @@ func (s *AuthServiceServer) Register(ctx context.Context, req *pb.RegisterReques
 		return nil, status.Error(codes.InvalidArgument, "email and password are required")
 	}
 
-	result, err := s.authUC.Register(ctx, authUC.RegisterInput{
-		Email:    req.Email,
-		Password: req.Password,
-	})
+	result, err := register.New(ctx,
+		&register.Params{
+			UserRepo:  s.UserRepo,
+			TokenRepo: s.TokenRepo,
+			Hasher:    s.Hasher,
+			JWT:       s.JWT,
+		},
+		&register.Payload{
+			Email:    req.Email,
+			Password: req.Password,
+		},
+	).Execute()
+
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -52,12 +74,23 @@ func (s *AuthServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*p
 		return nil, status.Error(codes.InvalidArgument, "email and password are required")
 	}
 
-	result, err := s.authUC.Login(ctx, authUC.LoginInput{
-		Email:     req.Email,
-		Password:  req.Password,
-		UserAgent: req.UserAgent,
-		IP:        req.Ip,
-	})
+	result, err := login.New(ctx,
+		&login.Params{
+			UserRepo:    s.UserRepo,
+			TokenRepo:   s.TokenRepo,
+			SessionRepo: s.SessionRepo,
+			Hasher:      s.Hasher,
+			JWT:         s.JWT,
+			SessionExp:  s.SessionExp,
+		},
+		&login.Payload{
+			Email:     req.Email,
+			Password:  req.Password,
+			UserAgent: req.UserAgent,
+			IP:        req.Ip,
+		},
+	).Execute()
+
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
@@ -78,16 +111,24 @@ func (s *AuthServiceServer) Refresh(ctx context.Context, req *pb.RefreshRequest)
 		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
 	}
 
-	tokens, err := s.authUC.Refresh(ctx, authUC.RefreshInput{
-		RefreshToken: req.RefreshToken,
-	})
+	result, err := refresh.New(ctx,
+		&refresh.Params{
+			UserRepo:  s.UserRepo,
+			TokenRepo: s.TokenRepo,
+			JWT:       s.JWT,
+		},
+		&refresh.Payload{
+			RefreshToken: req.RefreshToken,
+		},
+	).Execute()
+
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
 
 	return &pb.TokenResponse{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
+		AccessToken:  result.Tokens.AccessToken,
+		RefreshToken: result.Tokens.RefreshToken,
 	}, nil
 }
 
@@ -101,7 +142,16 @@ func (s *AuthServiceServer) Logout(ctx context.Context, req *pb.LogoutRequest) (
 		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
 	}
 
-	if err := s.authUC.Logout(ctx, userID, req.SessionId); err != nil {
+	if err := logout.New(ctx,
+		&logout.Params{
+			SessionRepo: s.SessionRepo,
+			TokenRepo:   s.TokenRepo,
+		},
+		&logout.Payload{
+			UserID:    userID,
+			SessionID: req.SessionId,
+		},
+	).Execute(); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -113,7 +163,7 @@ func (s *AuthServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateT
 		return nil, status.Error(codes.InvalidArgument, "access_token is required")
 	}
 
-	claims, err := s.jwtManager.ValidateAccessToken(req.AccessToken)
+	claims, err := s.JWT.ValidateAccessToken(req.AccessToken)
 	if err != nil {
 		return &pb.ValidateTokenResponse{Valid: false}, nil
 	}

@@ -1,18 +1,38 @@
 package handler
 
 import (
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	"github.com/yourusername/authservice/internal/usecase/auth"
+	"github.com/yourusername/authservice/internal/domain"
+	"github.com/yourusername/authservice/internal/pkg/hasher"
+	"github.com/yourusername/authservice/internal/pkg/jwt"
+	"github.com/yourusername/authservice/internal/usecase/auth/login"
+	"github.com/yourusername/authservice/internal/usecase/auth/logout"
+	"github.com/yourusername/authservice/internal/usecase/auth/logoutall"
+	"github.com/yourusername/authservice/internal/usecase/auth/refresh"
+	"github.com/yourusername/authservice/internal/usecase/auth/refreshsession"
+	"github.com/yourusername/authservice/internal/usecase/auth/register"
+	"github.com/yourusername/authservice/internal/usecase/user/getbyid"
 )
 
-type AuthHandler struct {
-	authUC auth.UseCase
+type AuthHandlerParams struct {
+	UserRepo    domain.UserRepository
+	TokenRepo   domain.TokenRepository
+	SessionRepo domain.SessionRepository
+	Hasher      hasher.Hasher
+	JWT         jwt.Manager
+	SessionExp  time.Duration
 }
 
-func NewAuthHandler(authUC auth.UseCase) *AuthHandler {
-	return &AuthHandler{authUC: authUC}
+type AuthHandler struct {
+	*AuthHandlerParams
+}
+
+func NewAuthHandler(params *AuthHandlerParams) *AuthHandler {
+	return &AuthHandler{AuthHandlerParams: params}
 }
 
 type RegisterRequest struct {
@@ -46,6 +66,11 @@ type TokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+type SessionResponse struct {
+	SessionID string `json:"session_id"`
+	ExpiresAt string `json:"expires_at"`
+}
+
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	var req RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -60,10 +85,19 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.authUC.Register(c.Context(), auth.RegisterInput{
-		Email:    req.Email,
-		Password: req.Password,
-	})
+	result, err := register.New(c.Context(),
+		&register.Params{
+			UserRepo:  h.UserRepo,
+			TokenRepo: h.TokenRepo,
+			Hasher:    h.Hasher,
+			JWT:       h.JWT,
+		},
+		&register.Payload{
+			Email:    req.Email,
+			Password: req.Password,
+		},
+	).Execute()
+
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -94,12 +128,23 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.authUC.Login(c.Context(), auth.LoginInput{
-		Email:     req.Email,
-		Password:  req.Password,
-		UserAgent: c.Get("User-Agent"),
-		IP:        c.IP(),
-	})
+	result, err := login.New(c.Context(),
+		&login.Params{
+			UserRepo:    h.UserRepo,
+			TokenRepo:   h.TokenRepo,
+			SessionRepo: h.SessionRepo,
+			Hasher:      h.Hasher,
+			JWT:         h.JWT,
+			SessionExp:  h.SessionExp,
+		},
+		&login.Payload{
+			Email:     req.Email,
+			Password:  req.Password,
+			UserAgent: c.Get("User-Agent"),
+			IP:        c.IP(),
+		},
+	).Execute()
+
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": err.Error(),
@@ -139,9 +184,17 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		})
 	}
 
-	tokens, err := h.authUC.Refresh(c.Context(), auth.RefreshInput{
-		RefreshToken: req.RefreshToken,
-	})
+	result, err := refresh.New(c.Context(),
+		&refresh.Params{
+			UserRepo:  h.UserRepo,
+			TokenRepo: h.TokenRepo,
+			JWT:       h.JWT,
+		},
+		&refresh.Payload{
+			RefreshToken: req.RefreshToken,
+		},
+	).Execute()
+
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": err.Error(),
@@ -149,8 +202,46 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(TokenResponse{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
+		AccessToken:  result.Tokens.AccessToken,
+		RefreshToken: result.Tokens.RefreshToken,
+	})
+}
+
+func (h *AuthHandler) RefreshSession(c *fiber.Ctx) error {
+	sessionID := c.Cookies("session_id")
+	if sessionID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "session_id cookie is required",
+		})
+	}
+
+	result, err := refreshsession.New(c.Context(),
+		&refreshsession.Params{
+			SessionRepo: h.SessionRepo,
+			SessionExp:  h.SessionExp,
+		},
+		&refreshsession.Payload{
+			SessionID: sessionID,
+		},
+	).Execute()
+
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "session_id",
+		Value:    result.Session.ID,
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+
+	return c.JSON(SessionResponse{
+		SessionID: result.Session.ID,
+		ExpiresAt: result.Session.ExpiresAt.Format(time.RFC3339),
 	})
 }
 
@@ -164,7 +255,25 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 
 	sessionID := c.Cookies("session_id")
 
-	if err := h.authUC.Logout(c.Context(), userID, sessionID); err != nil {
+	var refreshToken string
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.BodyParser(&body); err == nil {
+		refreshToken = body.RefreshToken
+	}
+
+	if err := logout.New(c.Context(),
+		&logout.Params{
+			SessionRepo: h.SessionRepo,
+			TokenRepo:   h.TokenRepo,
+		},
+		&logout.Payload{
+			UserID:       userID,
+			SessionID:    sessionID,
+			RefreshToken: refreshToken,
+		},
+	).Execute(); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -182,6 +291,40 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	})
 }
 
+func (h *AuthHandler) LogoutAll(c *fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "unauthorized",
+		})
+	}
+
+	if err := logoutall.New(c.Context(),
+		&logoutall.Params{
+			SessionRepo: h.SessionRepo,
+			TokenRepo:   h.TokenRepo,
+		},
+		&logoutall.Payload{
+			UserID: userID,
+		},
+	).Execute(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "session_id",
+		Value:    "",
+		HTTPOnly: true,
+		MaxAge:   -1,
+	})
+
+	return c.JSON(fiber.Map{
+		"message": "logged out from all devices",
+	})
+}
+
 func (h *AuthHandler) Me(c *fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
@@ -190,10 +333,23 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 		})
 	}
 
-	email, _ := c.Locals("email").(string)
+	result, err := getbyid.New(c.Context(),
+		&getbyid.Params{
+			UserRepo: h.UserRepo,
+		},
+		&getbyid.Payload{
+			UserID: userID,
+		},
+	).Execute()
+
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
 
 	return c.JSON(UserResponse{
-		ID:    userID.String(),
-		Email: email,
+		ID:    result.User.ID.String(),
+		Email: result.User.Email,
 	})
 }

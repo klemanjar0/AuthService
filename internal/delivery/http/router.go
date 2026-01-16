@@ -1,6 +1,8 @@
 package http
 
 import (
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -8,10 +10,19 @@ import (
 
 	"github.com/yourusername/authservice/internal/delivery/http/handler"
 	"github.com/yourusername/authservice/internal/delivery/http/middleware"
+	"github.com/yourusername/authservice/internal/domain"
+	"github.com/yourusername/authservice/internal/pkg/hasher"
 	"github.com/yourusername/authservice/internal/pkg/jwt"
-	authUC "github.com/yourusername/authservice/internal/usecase/auth"
-	userUC "github.com/yourusername/authservice/internal/usecase/user"
 )
+
+type RouterParams struct {
+	UserRepo    domain.UserRepository
+	TokenRepo   domain.TokenRepository
+	SessionRepo domain.SessionRepository
+	Hasher      hasher.Hasher
+	JWT         jwt.Manager
+	SessionExp  time.Duration
+}
 
 type Router struct {
 	app         *fiber.App
@@ -19,11 +30,7 @@ type Router struct {
 	authMW      *middleware.AuthMiddleware
 }
 
-func NewRouter(
-	authUseCase authUC.UseCase,
-	userUseCase userUC.UseCase,
-	jwtManager jwt.Manager,
-) *Router {
+func NewRouter(params *RouterParams) *Router {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: customErrorHandler,
 	})
@@ -36,8 +43,15 @@ func NewRouter(
 		AllowHeaders: "Origin,Content-Type,Accept,Authorization",
 	}))
 
-	authHandler := handler.NewAuthHandler(authUseCase)
-	authMW := middleware.NewAuthMiddleware(jwtManager)
+	authHandler := handler.NewAuthHandler(&handler.AuthHandlerParams{
+		UserRepo:    params.UserRepo,
+		TokenRepo:   params.TokenRepo,
+		SessionRepo: params.SessionRepo,
+		Hasher:      params.Hasher,
+		JWT:         params.JWT,
+		SessionExp:  params.SessionExp,
+	})
+	authMW := middleware.NewAuthMiddleware(params.JWT)
 
 	return &Router{
 		app:         app,
@@ -54,7 +68,9 @@ func (r *Router) Setup() {
 	auth.Post("/register", r.authHandler.Register)
 	auth.Post("/login", r.authHandler.Login)
 	auth.Post("/refresh", r.authHandler.Refresh)
+	auth.Post("/refresh-session", r.authHandler.RefreshSession)
 	auth.Post("/logout", r.authMW.JWT(), r.authHandler.Logout)
+	auth.Post("/logout-all", r.authMW.JWT(), r.authHandler.LogoutAll)
 
 	user := v1.Group("/user")
 	user.Use(r.authMW.JWT())
