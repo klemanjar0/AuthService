@@ -28,7 +28,7 @@ func (s *AuditCleanupScheduler) Start(ctx context.Context) {
 
 	logger.Info().Dur("interval", s.interval).Msg("audit cleanup scheduler started")
 
-	s.cleanup()
+	s.cleanup(ctx)
 
 	for {
 		select {
@@ -39,7 +39,7 @@ func (s *AuditCleanupScheduler) Start(ctx context.Context) {
 			logger.Info().Msg("audit cleanup scheduler stopped")
 			return
 		case <-ticker.C:
-			s.cleanup()
+			s.cleanup(ctx)
 		}
 	}
 }
@@ -48,8 +48,8 @@ func (s *AuditCleanupScheduler) Stop() {
 	close(s.stopCh)
 }
 
-func (s *AuditCleanupScheduler) cleanup() {
-	if err := s.auditRepo.DeleteOld(); err != nil {
+func (s *AuditCleanupScheduler) cleanup(ctx context.Context) {
+	if err := s.auditRepo.DeleteOld(ctx); err != nil {
 		logger.Error().Err(err).Msg("failed to cleanup old audit logs")
 		return
 	}

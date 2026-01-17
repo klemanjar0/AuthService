@@ -34,7 +34,7 @@ func New(ctx context.Context, params *Params, payload *Payload) *UseCase {
 
 func (u *UseCase) Execute() error {
 	if u.SessionID != "" {
-		if err := u.SessionRepo.Delete(u.SessionID); err != nil {
+		if err := u.SessionRepo.Delete(u.ctx, u.SessionID); err != nil {
 			logger.Warn().
 				Err(err).
 				Str("session_id", u.SessionID).
@@ -43,7 +43,7 @@ func (u *UseCase) Execute() error {
 	}
 
 	if u.RefreshToken != "" {
-		if err := u.TokenRepo.DeleteRefreshToken(u.RefreshToken); err != nil {
+		if err := u.TokenRepo.DeleteRefreshToken(u.ctx, u.RefreshToken); err != nil {
 			logger.Warn().
 				Err(err).
 				Msg("failed to delete refresh token")
@@ -65,7 +65,7 @@ func (u *UseCase) logAudit(userID *uuid.UUID, eventType string, payload map[stri
 		return
 	}
 	payloadBytes, _ := json.Marshal(payload)
-	_ = u.AuditRepo.Create(&domain.AuditLog{
+	_ = u.AuditRepo.Create(u.ctx, &domain.AuditLog{
 		UserID:    userID,
 		EventType: eventType,
 		Payload:   payloadBytes,

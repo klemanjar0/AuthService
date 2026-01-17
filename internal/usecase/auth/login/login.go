@@ -52,7 +52,7 @@ func New(ctx context.Context, params *Params, payload *Payload) *UseCase {
 }
 
 func (u *UseCase) Execute() (*Result, error) {
-	user, err := u.UserRepo.GetByEmail(u.Email)
+	user, err := u.UserRepo.GetByEmail(u.ctx, u.Email)
 	if err != nil {
 		logger.Debug().Str("email", u.Email).Msg("user not found")
 		u.logAudit(nil, domain.EventUserLoginFailed, map[string]any{"email": u.Email, "reason": "user not found"})
@@ -79,7 +79,7 @@ func (u *UseCase) Execute() (*Result, error) {
 		CreatedAt: time.Now(),
 	}
 
-	if err := u.SessionRepo.Create(session); err != nil {
+	if err := u.SessionRepo.Create(u.ctx, session); err != nil {
 		logger.Error().Err(err).Str("user_id", user.ID.String()).Msg("failed to create session")
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func (u *UseCase) logAudit(userID *uuid.UUID, eventType string, payload map[stri
 		return
 	}
 	payloadBytes, _ := json.Marshal(payload)
-	_ = u.AuditRepo.Create(&domain.AuditLog{
+	_ = u.AuditRepo.Create(u.ctx, &domain.AuditLog{
 		UserID:    userID,
 		EventType: eventType,
 		IP:        u.IP,
@@ -131,7 +131,7 @@ func (u *UseCase) generateTokens(user *domain.User) (*domain.TokenPair, error) {
 		ExpiresAt: refreshExp,
 	}
 
-	if err := u.TokenRepo.StoreRefreshToken(storedToken); err != nil {
+	if err := u.TokenRepo.StoreRefreshToken(u.ctx, storedToken); err != nil {
 		logger.Error().Err(err).Msg("failed to store refresh token")
 		return nil, err
 	}

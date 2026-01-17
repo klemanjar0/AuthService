@@ -24,9 +24,7 @@ func NewSessionRepository(client *redis.Client) *SessionRepository {
 	return &SessionRepository{client: client}
 }
 
-func (r *SessionRepository) Create(session *domain.Session) error {
-	ctx := context.Background()
-
+func (r *SessionRepository) Create(ctx context.Context, session *domain.Session) error {
 	data, err := json.Marshal(session)
 	if err != nil {
 		return err
@@ -46,9 +44,7 @@ func (r *SessionRepository) Create(session *domain.Session) error {
 	return r.client.SAdd(ctx, userKey, session.ID).Err()
 }
 
-func (r *SessionRepository) Get(sessionID string) (*domain.Session, error) {
-	ctx := context.Background()
-
+func (r *SessionRepository) Get(ctx context.Context, sessionID string) (*domain.Session, error) {
 	key := r.sessionKey(sessionID)
 	data, err := r.client.Get(ctx, key).Bytes()
 	if err != nil {
@@ -66,10 +62,8 @@ func (r *SessionRepository) Get(sessionID string) (*domain.Session, error) {
 	return &session, nil
 }
 
-func (r *SessionRepository) Refresh(sessionID string, newExpiry time.Duration) (*domain.Session, error) {
-	ctx := context.Background()
-
-	session, err := r.Get(sessionID)
+func (r *SessionRepository) Refresh(ctx context.Context, sessionID string, newExpiry time.Duration) (*domain.Session, error) {
+	session, err := r.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,15 +83,12 @@ func (r *SessionRepository) Refresh(sessionID string, newExpiry time.Duration) (
 	return session, nil
 }
 
-func (r *SessionRepository) Delete(sessionID string) error {
-	ctx := context.Background()
+func (r *SessionRepository) Delete(ctx context.Context, sessionID string) error {
 	key := r.sessionKey(sessionID)
 	return r.client.Del(ctx, key).Err()
 }
 
-func (r *SessionRepository) DeleteAllUserSessions(userID uuid.UUID) error {
-	ctx := context.Background()
-
+func (r *SessionRepository) DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) error {
 	userKey := r.userSessionsKey(userID)
 	sessions, err := r.client.SMembers(ctx, userKey).Result()
 	if err != nil {

@@ -30,9 +30,7 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	}
 }
 
-func (r *UserRepository) Create(user *domain.User) error {
-	ctx := context.Background()
-
+func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	if user.ID == uuid.Nil {
 		user.ID = uuid.New()
 	}
@@ -50,9 +48,7 @@ func (r *UserRepository) Create(user *domain.User) error {
 	return err
 }
 
-func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
-	ctx := context.Background()
-
+func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	dbUser, err := r.queries.GetUserByID(ctx, uuidToPgtype(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -64,9 +60,7 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 	return r.toDomain(dbUser), nil
 }
 
-func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
-	ctx := context.Background()
-
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	dbUser, err := r.queries.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -78,8 +72,7 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	return r.toDomain(dbUser), nil
 }
 
-func (r *UserRepository) Update(user *domain.User) error {
-	ctx := context.Background()
+func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	now := time.Now()
 	user.UpdatedAt = now
 
@@ -92,8 +85,7 @@ func (r *UserRepository) Update(user *domain.User) error {
 	return err
 }
 
-func (r *UserRepository) Delete(id uuid.UUID) error {
-	ctx := context.Background()
+func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.queries.DeleteUser(ctx, uuidToPgtype(id))
 }
 

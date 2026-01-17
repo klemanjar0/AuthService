@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +29,7 @@ type AuditLog struct {
 }
 
 type AuditLogRepository interface {
-	Create(log *AuditLog) error
-	GetByUserID(userID uuid.UUID, limit, offset int32) ([]*AuditLog, error)
-	DeleteOld() error
+	Create(ctx context.Context, log *AuditLog) error
+	GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*AuditLog, error)
+	DeleteOld(ctx context.Context) error
 }

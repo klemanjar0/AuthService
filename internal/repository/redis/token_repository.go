@@ -24,9 +24,7 @@ func NewTokenRepository(client *redis.Client) *TokenRepository {
 	return &TokenRepository{client: client}
 }
 
-func (r *TokenRepository) StoreRefreshToken(token *domain.RefreshToken) error {
-	ctx := context.Background()
-
+func (r *TokenRepository) StoreRefreshToken(ctx context.Context, token *domain.RefreshToken) error {
 	data, err := json.Marshal(token)
 	if err != nil {
 		return err
@@ -46,9 +44,7 @@ func (r *TokenRepository) StoreRefreshToken(token *domain.RefreshToken) error {
 	return r.client.SAdd(ctx, userKey, token.Token).Err()
 }
 
-func (r *TokenRepository) GetRefreshToken(token string) (*domain.RefreshToken, error) {
-	ctx := context.Background()
-
+func (r *TokenRepository) GetRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
 	key := r.tokenKey(token)
 	data, err := r.client.Get(ctx, key).Bytes()
 	if err != nil {
@@ -66,15 +62,12 @@ func (r *TokenRepository) GetRefreshToken(token string) (*domain.RefreshToken, e
 	return &refreshToken, nil
 }
 
-func (r *TokenRepository) DeleteRefreshToken(token string) error {
-	ctx := context.Background()
+func (r *TokenRepository) DeleteRefreshToken(ctx context.Context, token string) error {
 	key := r.tokenKey(token)
 	return r.client.Del(ctx, key).Err()
 }
 
-func (r *TokenRepository) DeleteAllUserTokens(userID uuid.UUID) error {
-	ctx := context.Background()
-
+func (r *TokenRepository) DeleteAllUserTokens(ctx context.Context, userID uuid.UUID) error {
 	userKey := r.userTokensKey(userID)
 	tokens, err := r.client.SMembers(ctx, userKey).Result()
 	if err != nil {

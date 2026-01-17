@@ -38,19 +38,19 @@ func New(ctx context.Context, params *Params, payload *Payload) *UseCase {
 }
 
 func (u *UseCase) Execute() (*Result, error) {
-	session, err := u.SessionRepo.Get(u.SessionID)
+	session, err := u.SessionRepo.Get(u.ctx, u.SessionID)
 	if err != nil {
 		logger.Debug().Str("session_id", u.SessionID).Msg("session not found")
 		return nil, ErrSessionNotFound
 	}
 
 	if time.Now().After(session.ExpiresAt) {
-		_ = u.SessionRepo.Delete(u.SessionID)
+		_ = u.SessionRepo.Delete(u.ctx, u.SessionID)
 		logger.Debug().Str("session_id", u.SessionID).Msg("session expired")
 		return nil, ErrSessionExpired
 	}
 
-	session, err = u.SessionRepo.Refresh(u.SessionID, u.SessionExp)
+	session, err = u.SessionRepo.Refresh(u.ctx, u.SessionID, u.SessionExp)
 	if err != nil {
 		logger.Error().Err(err).Str("session_id", u.SessionID).Msg("failed to refresh session")
 		return nil, err

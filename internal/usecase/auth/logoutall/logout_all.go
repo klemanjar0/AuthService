@@ -29,7 +29,7 @@ func New(ctx context.Context, params *Params, payload *Payload) *UseCase {
 }
 
 func (u *UseCase) Execute() error {
-	if err := u.TokenRepo.DeleteAllUserTokens(u.UserID); err != nil {
+	if err := u.TokenRepo.DeleteAllUserTokens(u.ctx, u.UserID); err != nil {
 		logger.Error().
 			Err(err).
 			Str("user_id", u.UserID.String()).
@@ -37,7 +37,7 @@ func (u *UseCase) Execute() error {
 		return err
 	}
 
-	if err := u.SessionRepo.DeleteAllUserSessions(u.UserID); err != nil {
+	if err := u.SessionRepo.DeleteAllUserSessions(u.ctx, u.UserID); err != nil {
 		logger.Error().
 			Err(err).
 			Str("user_id", u.UserID.String()).

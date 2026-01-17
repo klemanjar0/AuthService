@@ -47,7 +47,7 @@ func New(ctx context.Context, params *Params, payload *Payload) *UseCase {
 }
 
 func (u *UseCase) Execute() (*Result, error) {
-	existingUser, _ := u.UserRepo.GetByEmail(u.Email)
+	existingUser, _ := u.UserRepo.GetByEmail(u.ctx, u.Email)
 	if existingUser != nil {
 		return nil, ErrUserAlreadyExists
 	}
@@ -66,7 +66,7 @@ func (u *UseCase) Execute() (*Result, error) {
 		UpdatedAt:    time.Now(),
 	}
 
-	if err := u.UserRepo.Create(user); err != nil {
+	if err := u.UserRepo.Create(u.ctx, user); err != nil {
 		logger.Error().Err(err).Str("email", u.Email).Msg("failed to create user")
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (u *UseCase) logAudit(userID *uuid.UUID, eventType string, payload map[stri
 		return
 	}
 	payloadBytes, _ := json.Marshal(payload)
-	_ = u.AuditRepo.Create(&domain.AuditLog{
+	_ = u.AuditRepo.Create(u.ctx, &domain.AuditLog{
 		UserID:    userID,
 		EventType: eventType,
 		Payload:   payloadBytes,
@@ -117,7 +117,7 @@ func (u *UseCase) generateTokens(user *domain.User) (*domain.TokenPair, error) {
 		ExpiresAt: refreshExp,
 	}
 
-	if err := u.TokenRepo.StoreRefreshToken(storedToken); err != nil {
+	if err := u.TokenRepo.StoreRefreshToken(u.ctx, storedToken); err != nil {
 		logger.Error().Err(err).Msg("failed to store refresh token")
 		return nil, err
 	}

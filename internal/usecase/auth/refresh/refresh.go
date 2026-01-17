@@ -43,25 +43,25 @@ func New(ctx context.Context, params *Params, payload *Payload) *UseCase {
 }
 
 func (u *UseCase) Execute() (*Result, error) {
-	refreshToken, err := u.TokenRepo.GetRefreshToken(u.RefreshToken)
+	refreshToken, err := u.TokenRepo.GetRefreshToken(u.ctx, u.RefreshToken)
 	if err != nil {
 		logger.Debug().Msg("refresh token not found")
 		return nil, ErrInvalidToken
 	}
 
 	if time.Now().After(refreshToken.ExpiresAt) {
-		_ = u.TokenRepo.DeleteRefreshToken(u.RefreshToken)
+		_ = u.TokenRepo.DeleteRefreshToken(u.ctx, u.RefreshToken)
 		logger.Debug().Msg("refresh token expired")
 		return nil, ErrInvalidToken
 	}
 
-	user, err := u.UserRepo.GetByID(refreshToken.UserID)
+	user, err := u.UserRepo.GetByID(u.ctx, refreshToken.UserID)
 	if err != nil {
 		logger.Error().Err(err).Str("user_id", refreshToken.UserID.String()).Msg("user not found for refresh token")
 		return nil, err
 	}
 
-	if err := u.TokenRepo.DeleteRefreshToken(u.RefreshToken); err != nil {
+	if err := u.TokenRepo.DeleteRefreshToken(u.ctx, u.RefreshToken); err != nil {
 		logger.Warn().Err(err).Msg("failed to delete old refresh token")
 	}
 
@@ -82,7 +82,7 @@ func (u *UseCase) logAudit(userID *uuid.UUID, eventType string, payload map[stri
 		return
 	}
 	payloadBytes, _ := json.Marshal(payload)
-	_ = u.AuditRepo.Create(&domain.AuditLog{
+	_ = u.AuditRepo.Create(u.ctx, &domain.AuditLog{
 		UserID:    userID,
 		EventType: eventType,
 		Payload:   payloadBytes,
@@ -108,7 +108,7 @@ func (u *UseCase) generateTokens(user *domain.User) (*domain.TokenPair, error) {
 		ExpiresAt: refreshExp,
 	}
 
-	if err := u.TokenRepo.StoreRefreshToken(storedToken); err != nil {
+	if err := u.TokenRepo.StoreRefreshToken(u.ctx, storedToken); err != nil {
 		logger.Error().Err(err).Msg("failed to store refresh token")
 		return nil, err
 	}

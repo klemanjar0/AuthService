@@ -37,7 +37,7 @@ func New(ctx context.Context, params *Params, payload *Payload) *UseCase {
 }
 
 func (u *UseCase) Execute() (*Result, error) {
-	user, err := u.UserRepo.GetByID(u.UserID)
+	user, err := u.UserRepo.GetByID(u.ctx, u.UserID)
 	if err != nil {
 		logger.Debug().Str("user_id", u.UserID.String()).Msg("user not found")
 		return nil, ErrUserNotFound

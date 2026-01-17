@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,9 +17,9 @@ type Session struct {
 }
 
 type SessionRepository interface {
-	Create(session *Session) error
-	Get(sessionID string) (*Session, error)
-	Refresh(sessionID string, newExpiry time.Duration) (*Session, error)
-	Delete(sessionID string) error
-	DeleteAllUserSessions(userID uuid.UUID) error
+	Create(ctx context.Context, session *Session) error
+	Get(ctx context.Context, sessionID string) (*Session, error)
+	Refresh(ctx context.Context, sessionID string, newExpiry time.Duration) (*Session, error)
+	Delete(ctx context.Context, sessionID string) error
+	DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) error
 }

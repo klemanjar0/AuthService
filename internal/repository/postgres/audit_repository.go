@@ -24,9 +24,7 @@ func NewAuditLogRepository(pool *pgxpool.Pool) *AuditLogRepository {
 	}
 }
 
-func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
-	ctx := context.Background()
-
+func (r *AuditLogRepository) Create(ctx context.Context, log *domain.AuditLog) error {
 	var userID pgtype.UUID
 	if log.UserID != nil {
 		userID = uuidToPgtype(*log.UserID)
@@ -55,9 +53,7 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 	return err
 }
 
-func (r *AuditLogRepository) GetByUserID(userID uuid.UUID, limit, offset int32) ([]*domain.AuditLog, error) {
-	ctx := context.Background()
-
+func (r *AuditLogRepository) GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*domain.AuditLog, error) {
 	logs, err := r.queries.GetAuditLogsByUserID(ctx, sqlc.GetAuditLogsByUserIDParams{
 		UserID: uuidToPgtype(userID),
 		Limit:  limit,
@@ -74,8 +70,7 @@ func (r *AuditLogRepository) GetByUserID(userID uuid.UUID, limit, offset int32) 
 	return result, nil
 }
 
-func (r *AuditLogRepository) DeleteOld() error {
-	ctx := context.Background()
+func (r *AuditLogRepository) DeleteOld(ctx context.Context) error {
 	return r.queries.DeleteOldAuditLogs(ctx)
 }
 
