@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -18,6 +19,7 @@ import (
 	"github.com/yourusername/authservice/internal/pkg/logger"
 	postgresrepo "github.com/yourusername/authservice/internal/repository/postgres"
 	redisrepo "github.com/yourusername/authservice/internal/repository/redis"
+	"github.com/yourusername/authservice/internal/scheduler"
 )
 
 func main() {
@@ -61,6 +63,10 @@ func main() {
 	userRepo := postgresrepo.NewUserRepository(pool)
 	tokenRepo := redisrepo.NewTokenRepository(rdb)
 	sessionRepo := redisrepo.NewSessionRepository(rdb)
+	auditRepo := postgresrepo.NewAuditLogRepository(pool)
+
+	auditCleanup := scheduler.NewAuditCleanupScheduler(auditRepo, 1*time.Hour)
+	go auditCleanup.Start(ctx)
 
 	passwordHasher := hasher.NewBcryptHasher(0)
 	jwtManager := jwt.NewManager(cfg.JWT.Secret, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
@@ -69,6 +75,7 @@ func main() {
 		UserRepo:    userRepo,
 		TokenRepo:   tokenRepo,
 		SessionRepo: sessionRepo,
+		AuditRepo:   auditRepo,
 		Hasher:      passwordHasher,
 		JWT:         jwtManager,
 		SessionExp:  cfg.Session.Expiry,
@@ -79,6 +86,7 @@ func main() {
 		UserRepo:    userRepo,
 		TokenRepo:   tokenRepo,
 		SessionRepo: sessionRepo,
+		AuditRepo:   auditRepo,
 		Hasher:      passwordHasher,
 		JWT:         jwtManager,
 		SessionExp:  cfg.Session.Expiry,

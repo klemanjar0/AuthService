@@ -14,13 +14,16 @@ import (
 	"github.com/yourusername/authservice/internal/usecase/auth/login"
 	"github.com/yourusername/authservice/internal/usecase/auth/logout"
 	"github.com/yourusername/authservice/internal/usecase/auth/refresh"
+	"github.com/yourusername/authservice/internal/usecase/auth/refreshsession"
 	"github.com/yourusername/authservice/internal/usecase/auth/register"
+	"github.com/yourusername/authservice/internal/usecase/auth/validatesession"
 )
 
 type AuthServiceParams struct {
 	UserRepo    domain.UserRepository
 	TokenRepo   domain.TokenRepository
 	SessionRepo domain.SessionRepository
+	AuditRepo   domain.AuditLogRepository
 	Hasher      hasher.Hasher
 	JWT         jwt.Manager
 	SessionExp  time.Duration
@@ -46,6 +49,7 @@ func (s *AuthServiceServer) Register(ctx context.Context, req *pb.RegisterReques
 		&register.Params{
 			UserRepo:  s.UserRepo,
 			TokenRepo: s.TokenRepo,
+			AuditRepo: s.AuditRepo,
 			Hasher:    s.Hasher,
 			JWT:       s.JWT,
 		},
@@ -172,5 +176,55 @@ func (s *AuthServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateT
 		Valid:  true,
 		UserId: claims.UserID.String(),
 		Email:  claims.Email,
+	}, nil
+}
+
+func (s *AuthServiceServer) ValidateSession(ctx context.Context, req *pb.ValidateSessionRequest) (*pb.ValidateSessionResponse, error) {
+	if req.SessionId == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+
+	result, err := validatesession.New(ctx,
+		&validatesession.Params{
+			SessionRepo: s.SessionRepo,
+		},
+		&validatesession.Payload{
+			SessionID: req.SessionId,
+		},
+	).Execute()
+
+	if err != nil {
+		return &pb.ValidateSessionResponse{Valid: false}, nil
+	}
+
+	return &pb.ValidateSessionResponse{
+		Valid:     true,
+		UserId:    result.Session.UserID.String(),
+		ExpiresAt: result.Session.ExpiresAt.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *AuthServiceServer) RefreshSession(ctx context.Context, req *pb.RefreshSessionRequest) (*pb.RefreshSessionResponse, error) {
+	if req.SessionId == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+
+	result, err := refreshsession.New(ctx,
+		&refreshsession.Params{
+			SessionRepo: s.SessionRepo,
+			SessionExp:  s.SessionExp,
+		},
+		&refreshsession.Payload{
+			SessionID: req.SessionId,
+		},
+	).Execute()
+
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, err.Error())
+	}
+
+	return &pb.RefreshSessionResponse{
+		SessionId: result.Session.ID,
+		ExpiresAt: result.Session.ExpiresAt.Format(time.RFC3339),
 	}, nil
 }

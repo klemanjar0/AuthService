@@ -22,6 +22,7 @@ type AuthHandlerParams struct {
 	UserRepo    domain.UserRepository
 	TokenRepo   domain.TokenRepository
 	SessionRepo domain.SessionRepository
+	AuditRepo   domain.AuditLogRepository
 	Hasher      hasher.Hasher
 	JWT         jwt.Manager
 	SessionExp  time.Duration
@@ -89,6 +90,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		&register.Params{
 			UserRepo:  h.UserRepo,
 			TokenRepo: h.TokenRepo,
+			AuditRepo: h.AuditRepo,
 			Hasher:    h.Hasher,
 			JWT:       h.JWT,
 		},
@@ -133,6 +135,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			UserRepo:    h.UserRepo,
 			TokenRepo:   h.TokenRepo,
 			SessionRepo: h.SessionRepo,
+			AuditRepo:   h.AuditRepo,
 			Hasher:      h.Hasher,
 			JWT:         h.JWT,
 			SessionExp:  h.SessionExp,
@@ -188,6 +191,7 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		&refresh.Params{
 			UserRepo:  h.UserRepo,
 			TokenRepo: h.TokenRepo,
+			AuditRepo: h.AuditRepo,
 			JWT:       h.JWT,
 		},
 		&refresh.Payload{
@@ -267,6 +271,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		&logout.Params{
 			SessionRepo: h.SessionRepo,
 			TokenRepo:   h.TokenRepo,
+			AuditRepo:   h.AuditRepo,
 		},
 		&logout.Payload{
 			UserID:       userID,

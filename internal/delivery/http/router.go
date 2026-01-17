@@ -19,6 +19,7 @@ type RouterParams struct {
 	UserRepo    domain.UserRepository
 	TokenRepo   domain.TokenRepository
 	SessionRepo domain.SessionRepository
+	AuditRepo   domain.AuditLogRepository
 	Hasher      hasher.Hasher
 	JWT         jwt.Manager
 	SessionExp  time.Duration
@@ -47,6 +48,7 @@ func NewRouter(params *RouterParams) *Router {
 		UserRepo:    params.UserRepo,
 		TokenRepo:   params.TokenRepo,
 		SessionRepo: params.SessionRepo,
+		AuditRepo:   params.AuditRepo,
 		Hasher:      params.Hasher,
 		JWT:         params.JWT,
 		SessionExp:  params.SessionExp,

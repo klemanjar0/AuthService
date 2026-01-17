@@ -2,6 +2,7 @@ package register
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -20,6 +21,7 @@ var (
 type Params struct {
 	UserRepo  domain.UserRepository
 	TokenRepo domain.TokenRepository
+	AuditRepo domain.AuditLogRepository
 	Hasher    hasher.Hasher
 	JWT       jwt.Manager
 }
@@ -74,12 +76,26 @@ func (u *UseCase) Execute() (*Result, error) {
 		return nil, err
 	}
 
+	u.logAudit(&user.ID, domain.EventUserRegistered, map[string]any{"email": user.Email})
+
 	logger.Info().Str("user_id", user.ID.String()).Str("email", user.Email).Msg("user registered successfully")
 
 	return &Result{
 		User:   user,
 		Tokens: tokens,
 	}, nil
+}
+
+func (u *UseCase) logAudit(userID *uuid.UUID, eventType string, payload map[string]any) {
+	if u.AuditRepo == nil {
+		return
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	_ = u.AuditRepo.Create(&domain.AuditLog{
+		UserID:    userID,
+		EventType: eventType,
+		Payload:   payloadBytes,
+	})
 }
 
 func (u *UseCase) generateTokens(user *domain.User) (*domain.TokenPair, error) {

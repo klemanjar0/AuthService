@@ -2,6 +2,7 @@ package login
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -21,6 +22,7 @@ type Params struct {
 	UserRepo    domain.UserRepository
 	TokenRepo   domain.TokenRepository
 	SessionRepo domain.SessionRepository
+	AuditRepo   domain.AuditLogRepository
 	Hasher      hasher.Hasher
 	JWT         jwt.Manager
 	SessionExp  time.Duration
@@ -53,11 +55,13 @@ func (u *UseCase) Execute() (*Result, error) {
 	user, err := u.UserRepo.GetByEmail(u.Email)
 	if err != nil {
 		logger.Debug().Str("email", u.Email).Msg("user not found")
+		u.logAudit(nil, domain.EventUserLoginFailed, map[string]any{"email": u.Email, "reason": "user not found"})
 		return nil, ErrInvalidCredentials
 	}
 
 	if !u.Hasher.Compare(user.PasswordHash, u.Password) {
 		logger.Debug().Str("email", u.Email).Msg("invalid password")
+		u.logAudit(&user.ID, domain.EventUserLoginFailed, map[string]any{"email": u.Email, "reason": "invalid password"})
 		return nil, ErrInvalidCredentials
 	}
 
@@ -80,6 +84,8 @@ func (u *UseCase) Execute() (*Result, error) {
 		return nil, err
 	}
 
+	u.logAudit(&user.ID, domain.EventUserLogin, map[string]any{"session_id": session.ID})
+
 	logger.Info().
 		Str("user_id", user.ID.String()).
 		Str("session_id", session.ID).
@@ -90,6 +96,20 @@ func (u *UseCase) Execute() (*Result, error) {
 		Tokens:    tokens,
 		SessionID: session.ID,
 	}, nil
+}
+
+func (u *UseCase) logAudit(userID *uuid.UUID, eventType string, payload map[string]any) {
+	if u.AuditRepo == nil {
+		return
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	_ = u.AuditRepo.Create(&domain.AuditLog{
+		UserID:    userID,
+		EventType: eventType,
+		IP:        u.IP,
+		UA:        u.UserAgent,
+		Payload:   payloadBytes,
+	})
 }
 
 func (u *UseCase) generateTokens(user *domain.User) (*domain.TokenPair, error) {

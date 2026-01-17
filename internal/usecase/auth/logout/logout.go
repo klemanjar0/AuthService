@@ -2,6 +2,7 @@ package logout
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 
@@ -12,6 +13,7 @@ import (
 type Params struct {
 	SessionRepo domain.SessionRepository
 	TokenRepo   domain.TokenRepository
+	AuditRepo   domain.AuditLogRepository
 }
 
 type Payload struct {
@@ -48,10 +50,24 @@ func (u *UseCase) Execute() error {
 		}
 	}
 
+	u.logAudit(&u.UserID, domain.EventUserLogout, map[string]any{"session_id": u.SessionID})
+
 	logger.Info().
 		Str("user_id", u.UserID.String()).
 		Str("session_id", u.SessionID).
 		Msg("user logged out successfully")
 
 	return nil
+}
+
+func (u *UseCase) logAudit(userID *uuid.UUID, eventType string, payload map[string]any) {
+	if u.AuditRepo == nil {
+		return
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	_ = u.AuditRepo.Create(&domain.AuditLog{
+		UserID:    userID,
+		EventType: eventType,
+		Payload:   payloadBytes,
+	})
 }
